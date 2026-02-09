@@ -1,6 +1,0 @@
-enabled: true
-description: Load github data to duckdb
-group_name: default
-metadata:
-  source: github
-  destination: duckdb

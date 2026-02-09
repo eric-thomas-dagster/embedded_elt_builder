@@ -1,7 +1,0 @@
-source_type: github
-configuration:
-  repos: dagster-io/dagster
-  resources:
-  - issues
-  - pull_requests
-  - workflows
