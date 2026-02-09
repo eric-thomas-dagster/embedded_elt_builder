@@ -63,10 +63,10 @@ Launch the web interface to visually create and manage pipelines:
 python -m embedded_elt_builder.web
 
 # Or use the CLI command
-elt-builder ui
+elt ui
 ```
 
-The web UI will open at `http://localhost:8050`
+The web UI will open at `http://localhost:8000`
 
 **Features:**
 - Create new pipelines with interactive forms
@@ -78,36 +78,139 @@ The web UI will open at `http://localhost:8050`
 
 ### CLI
 
-#### Create a New Pipeline
+The CLI provides powerful commands for managing pipelines from the terminal with rich formatted output.
 
-**dlt Pipeline:**
+#### Repository Status
+
+Check git status and pipeline summary:
+
 ```bash
-elt-builder scaffold dlt \
-  --name my_api_pipeline \
-  --source rest_api \
-  --destination duckdb
+elt status
 ```
 
-**Sling Replication:**
+Shows:
+- Current branch and remote
+- Uncommitted changes and files
+- Commits ahead/behind remote
+- Pipeline counts by tool and status
+
+#### List Pipelines
+
+List all pipelines with filtering options:
+
 ```bash
-elt-builder scaffold sling \
-  --name postgres_to_snowflake \
-  --source postgres \
+# List all pipelines
+elt list
+
+# Filter by tool type
+elt list --tool dlt
+elt list --tool sling
+
+# Filter by status
+elt list --enabled
+elt list --disabled
+```
+
+#### Show Pipeline Details
+
+Display comprehensive pipeline information:
+
+```bash
+elt show my_pipeline
+```
+
+Shows:
+- Basic info (name, tool, source, destination, group)
+- Schedule configuration
+- Owners and tags
+- Asset kinds
+- Retry policy
+
+#### Create New Pipeline
+
+Interactively create pipelines with auto tool selection:
+
+```bash
+# Create with interactive configuration
+elt scaffold create github_to_snowflake \
+  --source github \
   --destination snowflake
+
+# Create with schedule
+elt scaffold create stripe_daily \
+  --source stripe \
+  --destination duckdb \
+  --schedule "0 2 * * *"
+
+# Skip interactive prompts
+elt scaffold create pg_to_bq \
+  --source postgres \
+  --destination bigquery \
+  --no-interactive
+
+# Specify custom options
+elt scaffold create my_pipeline \
+  --source rest_api \
+  --destination duckdb \
+  --description "My custom pipeline" \
+  --group my_group \
+  --no-git-commit
 ```
 
-#### List All Pipelines
+#### Enable/Disable Pipelines
+
+Toggle pipeline execution:
 
 ```bash
-elt-builder list
+# Enable a pipeline
+elt enable my_pipeline
+
+# Disable a pipeline
+elt disable my_pipeline
+
+# Skip git operations
+elt enable my_pipeline --no-git-commit
 ```
 
-#### Delete a Pipeline
+#### Validate Pipelines
+
+Check all pipeline configurations for errors:
 
 ```bash
-elt-builder delete dlt my_api_pipeline
-# or
-elt-builder delete sling postgres_to_snowflake
+elt validate
+```
+
+Validates:
+- Required files exist (dagster.yaml, pipeline.py/replication.yaml)
+- YAML syntax is valid
+- Required fields are present
+- Cron schedules are valid
+- Pipeline code has run() function (dlt)
+
+#### Delete Pipeline
+
+Remove a pipeline:
+
+```bash
+elt delete my_pipeline
+
+# Skip git operations
+elt delete my_pipeline --no-git-commit
+```
+
+#### Launch Web UI
+
+Start the web interface:
+
+```bash
+# Default port (8000)
+elt ui
+
+# Custom port
+elt ui --port 8080
+
+# Specify repository path
+elt ui --repo-path /path/to/pipelines
 ```
 
 ## Project Structure
@@ -117,7 +220,11 @@ embedded_elt_builder/
 ├── cli/                    # Command-line interface
 │   ├── main.py            # CLI entry point
 │   ├── scaffold.py        # Pipeline scaffolding
-│   ├── list_pipelines.py  # List command
+│   ├── list_pipelines.py  # List command (with rich tables)
+│   ├── show.py            # Show pipeline details
+│   ├── toggle.py          # Enable/disable commands
+│   ├── validate.py        # Validate configurations
+│   ├── status.py          # Repository status
 │   ├── delete.py          # Delete command
 │   └── ui.py              # Launch web UI
 ├── web/                    # Web interface
@@ -283,7 +390,8 @@ python -m embedded_elt_builder.web
 - **Jinja2** - Template rendering
 - **GitPython** - Git operations
 - **Pydantic** - Data validation
-- **typer** - CLI framework
+- **click** - CLI framework
+- **rich** - Beautiful terminal formatting
 
 ## License
 
