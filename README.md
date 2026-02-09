@@ -2,6 +2,12 @@
 
 A powerful tool for creating, managing, and deploying ELT pipelines using [dlt](https://dlthub.com/) and [Sling](https://slingdata.io/). Features both a CLI and a modern web UI with dark mode support.
 
+## Screenshot
+
+![ELT Pipeline Manager Web UI](embedded_elt_builder/assets/web-ui-screenshot.png)
+
+*The Web UI showing the pipeline management interface with search, filtering, and bulk operations*
+
 ## Features
 
 ### 🎨 Web UI
