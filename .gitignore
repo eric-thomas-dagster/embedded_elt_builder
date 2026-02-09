@@ -31,9 +31,6 @@ dagster_elt_project/
 # Example pipelines (keep separate)
 elt_pipelines_example/
 
-# Documentation (generated)
-*.md
-
 # Dependencies
 requirements.txt
 requirements-min.txt
