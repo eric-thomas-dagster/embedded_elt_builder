@@ -37,7 +37,7 @@ class PipelineRequest(BaseModel):
     incremental_enabled: bool = False  # Enable incremental loading (creates partitioned assets)
     cursor_field: Optional[str] = None  # Cursor field for incremental loading (becomes partition key)
     cursor_initial_value: Optional[str] = None  # Initial cursor value
-    partition_frequency: str = "@daily"  # Partition frequency for Dagster partitioned assets
+    partition_frequency: Optional[str] = "@daily"  # Partition frequency for Dagster partitioned assets (only used if incremental_enabled)
     file_format: str = "parquet"  # File format for file-based destinations (parquet, jsonl, csv)
     compression: str = "gzip"  # Compression method (gzip, none, bz2, snappy, zstd)
     table_prefix: Optional[str] = None  # Prefix for table names (e.g., "raw_")

@@ -3235,7 +3235,7 @@
             const incrementalEnabled = document.getElementById('incrementalEnabled').checked;
             const cursorField = incrementalEnabled ? formData.get('cursorField') : null;
             const cursorInitialValue = incrementalEnabled ? formData.get('cursorInitialValue') : null;
-            const partitionFrequency = formData.get('partitionFrequency') || '@daily';
+            const partitionFrequency = incrementalEnabled ? (formData.get('partitionFrequency') || '@daily') : null;
 
             const data = {
                 name: formData.get('name'),
