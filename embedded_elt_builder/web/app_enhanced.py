@@ -606,20 +606,50 @@ def create_app(repo_path: str) -> FastAPI:
 
     @app.get("/api/git/status")
     async def git_status():
-        """Get git repository status."""
+        """Get comprehensive git repository status including sync status with remote."""
         if not (app.state.repo_path / ".git").exists():
             return {"is_repo": False}
 
         try:
             repo = Repo(app.state.repo_path)
+            has_remote = bool(repo.remotes)
 
-            return {
+            result = {
                 "is_repo": True,
                 "branch": repo.active_branch.name,
                 "is_dirty": repo.is_dirty(),
                 "untracked_files": repo.untracked_files,
-                "has_remote": bool(repo.remotes)
+                "has_remote": has_remote,
+                "commits_ahead": 0,
+                "commits_behind": 0,
+                "is_diverged": False
             }
+
+            # If we have a remote, check sync status
+            if has_remote:
+                try:
+                    origin = repo.remotes.origin
+                    current_branch = repo.active_branch.name
+
+                    # Fetch latest from remote (lightweight, just updates refs)
+                    origin.fetch()
+
+                    # Get commits behind/ahead
+                    local_commit = repo.head.commit
+                    remote_commit = origin.refs[current_branch].commit
+                    commits_behind = list(repo.iter_commits(f'{local_commit}..{remote_commit}'))
+                    commits_ahead = list(repo.iter_commits(f'{remote_commit}..{local_commit}'))
+
+                    result.update({
+                        "commits_ahead": len(commits_ahead),
+                        "commits_behind": len(commits_behind),
+                        "is_diverged": len(commits_ahead) > 0 and len(commits_behind) > 0
+                    })
+                except Exception as e:
+                    # If we can't check remote status, just continue with local info
+                    result["remote_check_error"] = str(e)
+
+            return result
         except Exception as e:
             return {"is_repo": False, "error": str(e)}
 
@@ -656,14 +686,51 @@ def create_app(repo_path: str) -> FastAPI:
                 raise HTTPException(status_code=400, detail="No remote configured")
 
             origin = repo.remotes.origin
-            origin.push()
+            current_branch = repo.active_branch.name
+
+            # Check if we're behind remote before pushing
+            try:
+                origin.fetch()
+                local_commit = repo.head.commit
+                remote_commit = origin.refs[current_branch].commit
+                commits_behind = list(repo.iter_commits(f'{local_commit}..{remote_commit}'))
+
+                if len(commits_behind) > 0:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Push rejected: Your branch is behind remote by {len(commits_behind)} commit(s). Pull first to integrate remote changes."
+                    )
+            except HTTPException:
+                raise
+            except Exception:
+                # If we can't check, try to push anyway
+                pass
+
+            # Attempt the push
+            push_info = origin.push()
+
+            # Check if push was successful
+            if push_info and push_info[0].flags & 1024:  # ERROR flag
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Push failed: {push_info[0].summary}"
+                )
 
             return {
                 "success": True,
                 "message": "Pushed to remote"
             }
+        except HTTPException:
+            raise
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            error_msg = str(e)
+            # Provide more helpful error messages
+            if "rejected" in error_msg.lower():
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Push rejected: Remote has changes you don't have locally. Pull first.\n\nDetails: {error_msg}"
+                )
+            raise HTTPException(status_code=500, detail=f"Push failed: {error_msg}")
 
     @app.get("/api/git/diff")
     async def git_diff():
@@ -822,56 +889,6 @@ def create_app(repo_path: str) -> FastAPI:
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
-    @app.get("/api/git/status")
-    async def git_status():
-        """Check if local repo is behind remote."""
-        try:
-            repo_path = app.state.repo_path
-
-            if not (repo_path / ".git").exists():
-                return {"has_git": False}
-
-            repo = Repo(repo_path)
-
-            # Check if we have a remote
-            if not repo.remotes:
-                return {
-                    "has_git": True,
-                    "has_remote": False
-                }
-
-            origin = repo.remotes.origin
-            current_branch = repo.active_branch.name
-
-            # Fetch latest from remote
-            origin.fetch()
-
-            # Get commits behind/ahead
-            local_commit = repo.head.commit
-            try:
-                remote_commit = origin.refs[current_branch].commit
-                commits_behind = list(repo.iter_commits(f'{local_commit}..{remote_commit}'))
-                commits_ahead = list(repo.iter_commits(f'{remote_commit}..{local_commit}'))
-
-                return {
-                    "has_git": True,
-                    "has_remote": True,
-                    "current_branch": current_branch,
-                    "is_behind": len(commits_behind) > 0,
-                    "commits_behind": len(commits_behind),
-                    "commits_ahead": len(commits_ahead),
-                    "can_pull": len(commits_behind) > 0 and len(commits_ahead) == 0
-                }
-            except Exception:
-                return {
-                    "has_git": True,
-                    "has_remote": True,
-                    "current_branch": current_branch,
-                    "error": "Could not compare with remote"
-                }
-
-        except Exception as e:
-            return {"has_git": True, "error": str(e)}
 
     @app.post("/api/git/pull")
     async def git_pull():

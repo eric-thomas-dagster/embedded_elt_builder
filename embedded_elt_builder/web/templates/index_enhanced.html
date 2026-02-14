@@ -4076,9 +4076,27 @@
                     return;
                 }
 
+                // Build sync status badge
+                let syncBadge = '';
+                if (status.has_remote) {
+                    const ahead = status.commits_ahead || 0;
+                    const behind = status.commits_behind || 0;
+                    const isDiverged = status.is_diverged || false;
+
+                    if (isDiverged) {
+                        syncBadge = `<span style="background: #f59e0b; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85em; margin-left: 8px;">⚠️ Diverged: ↑${ahead} ↓${behind}</span>`;
+                    } else if (ahead > 0 && behind === 0) {
+                        syncBadge = `<span style="background: #3b82f6; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85em; margin-left: 8px;">↑${ahead} ahead</span>`;
+                    } else if (behind > 0 && ahead === 0) {
+                        syncBadge = `<span style="background: #ef4444; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85em; margin-left: 8px;">↓${behind} behind</span>`;
+                    } else if (ahead === 0 && behind === 0) {
+                        syncBadge = `<span style="background: #10b981; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85em; margin-left: 8px;">✓ In sync</span>`;
+                    }
+                }
+
                 container.innerHTML = `
                     <div style="margin-bottom: 15px;">
-                        <strong>Branch:</strong> ${status.branch}<br>
+                        <strong>Branch:</strong> ${status.branch}${syncBadge}<br>
                         <strong>Status:</strong> ${status.is_dirty ? '<span style="color: #e74c3c;">Uncommitted changes</span>' : '<span style="color: #27ae60;">Clean</span>'}<br>
                         ${status.untracked_files.length > 0 ? `<strong>Untracked files:</strong> ${status.untracked_files.length}` : ''}
                     </div>
@@ -4278,6 +4296,33 @@
             const proceed = await checkEnvVarsBeforeGitOp();
             if (!proceed) return;
 
+            // Check git status before prompting for commit message
+            try {
+                const status = await apiCall('/api/git/status', { showAlert: false });
+
+                // Warn if branch is diverged or behind
+                if (status.is_diverged) {
+                    const proceed = confirm(
+                        `⚠️ WARNING: Your branch has diverged from the remote!\n\n` +
+                        `↑ ${status.commits_ahead} commits ahead\n` +
+                        `↓ ${status.commits_behind} commits behind\n\n` +
+                        `Your push will likely be REJECTED. You should pull and merge first.\n\n` +
+                        `Do you want to continue anyway?`
+                    );
+                    if (!proceed) return;
+                } else if (status.commits_behind > 0) {
+                    const proceed = confirm(
+                        `⚠️ WARNING: Your branch is ${status.commits_behind} commit(s) behind the remote.\n\n` +
+                        `Your push will be REJECTED. You should pull first to get the latest changes.\n\n` +
+                        `Do you want to continue anyway?`
+                    );
+                    if (!proceed) return;
+                }
+            } catch (error) {
+                console.error('Error checking git status:', error);
+                // Continue even if status check fails
+            }
+
             const message = prompt('Commit message:', 'Update pipelines');
             if (!message) return;
 
@@ -4289,13 +4334,24 @@
                 });
 
                 // Push to remote
-                await apiCall('/api/git/push', {method: 'POST'});
+                try {
+                    await apiCall('/api/git/push', {method: 'POST'});
+                    showAlert('Changes committed and pushed successfully', 'success');
+                } catch (pushError) {
+                    // Commit succeeded but push failed - show specific error
+                    showAlert(
+                        `⚠️ Committed locally but push failed:\n\n${pushError.message}\n\n` +
+                        `Your changes are saved locally but not on GitHub yet. ` +
+                        `You may need to pull and merge before pushing.`,
+                        'error'
+                    );
+                }
 
-                showAlert('Changes committed and pushed successfully', 'success');
                 await loadGitStatusInModal();
                 await loadGitStatus();
             } catch (error) {
                 console.error('Error committing and pushing changes:', error);
+                showAlert(`Failed to commit: ${error.message}`, 'error');
             }
         }
 
@@ -4374,6 +4430,28 @@
             }
 
             try {
+                // Check git status before committing
+                const status = await apiCall('/api/git/status', { showAlert: false });
+
+                // Warn if branch is diverged or behind
+                if (status.is_diverged) {
+                    const proceed = confirm(
+                        `⚠️ WARNING: Your branch has diverged from the remote!\n\n` +
+                        `↑ ${status.commits_ahead} commits ahead\n` +
+                        `↓ ${status.commits_behind} commits behind\n\n` +
+                        `Your push will likely be REJECTED. You should pull and merge first.\n\n` +
+                        `Do you want to continue anyway?`
+                    );
+                    if (!proceed) return;
+                } else if (status.commits_behind > 0) {
+                    const proceed = confirm(
+                        `⚠️ WARNING: Your branch is ${status.commits_behind} commit(s) behind the remote.\n\n` +
+                        `Your push will be REJECTED. You should pull first to get the latest changes.\n\n` +
+                        `Do you want to continue anyway?`
+                    );
+                    if (!proceed) return;
+                }
+
                 // Commit changes
                 await apiCall('/api/git/commit', {
                     method: 'POST',
@@ -4381,9 +4459,19 @@
                 });
 
                 // Push to remote
-                await apiCall('/api/git/push', {method: 'POST'});
+                try {
+                    await apiCall('/api/git/push', {method: 'POST'});
+                    showAlert('Changes committed and pushed successfully', 'success');
+                } catch (pushError) {
+                    // Commit succeeded but push failed - show specific error
+                    showAlert(
+                        `⚠️ Committed locally but push failed:\n\n${pushError.message}\n\n` +
+                        `Your changes are saved locally but not on GitHub yet. ` +
+                        `You may need to pull and merge before pushing.`,
+                        'error'
+                    );
+                }
 
-                showAlert('Changes committed and pushed successfully', 'success');
                 document.getElementById('gitCommitMessage').value = '';
                 await loadGitStatusInModal();
                 await loadGitStatus();
@@ -4391,6 +4479,7 @@
                 await loadGitHistory();
             } catch (error) {
                 console.error('Error committing and pushing changes:', error);
+                showAlert(`Failed to commit: ${error.message}`, 'error');
             }
         }
 
