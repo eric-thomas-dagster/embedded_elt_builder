@@ -3308,11 +3308,16 @@
                 closeModal('createPipelineModal');
                 form.reset();
                 document.querySelector('input[name="name"]').disabled = false;
-                document.getElementById('sourceConfigFields').classList.add('hidden');
-                document.getElementById('toolRecommendation').classList.add('hidden');
-                document.getElementById('credentialsInput').innerHTML = '';
-                document.getElementById('sourceCredentialsFields').innerHTML = '';
-                document.getElementById('destinationCredentialsFields').innerHTML = '';
+                const sourceConfigFields = document.getElementById('sourceConfigFields');
+                if (sourceConfigFields) sourceConfigFields.classList.add('hidden');
+                const toolRecommendation = document.getElementById('toolRecommendation');
+                if (toolRecommendation) toolRecommendation.classList.add('hidden');
+                const credentialsInput = document.getElementById('credentialsInput');
+                if (credentialsInput) credentialsInput.innerHTML = '';
+                const sourceCredentialsFields = document.getElementById('sourceCredentialsFields');
+                if (sourceCredentialsFields) sourceCredentialsFields.innerHTML = '';
+                const destinationCredentialsFields = document.getElementById('destinationCredentialsFields');
+                if (destinationCredentialsFields) destinationCredentialsFields.innerHTML = '';
                 editingPipeline = null;
                 resetStepper();
 
@@ -4562,11 +4567,15 @@
         window.syncSingleVarToDagsterPlus = syncSingleVarToDagsterPlus;
         window.showDagsterValueInputs = showDagsterValueInputs;
         window.gitCommit = gitCommit;
+        window.gitCommitWithMessage = gitCommitWithMessage;
         window.gitPush = gitPush;
         window.gitInit = gitInit;
         window.gitClone = gitClone;
         window.gitAddRemote = gitAddRemote;
         window.showAddRemoteForm = showAddRemoteForm;
+        window.loadGitHistory = loadGitHistory;
+        window.loadGitDiff = loadGitDiff;
+        window.gitRevert = gitRevert;
         window.loadCredentialFields = loadCredentialFields;
         window.testCredentials = testCredentials;
         window.loadCredentialInputFields = loadCredentialInputFields;
