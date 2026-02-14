@@ -1864,7 +1864,17 @@
                     let errorMessage = 'API request failed';
                     try {
                         const error = await response.json();
-                        errorMessage = error.detail || errorMessage;
+                        // Handle both simple string details and complex validation errors
+                        if (typeof error.detail === 'string') {
+                            errorMessage = error.detail;
+                        } else if (Array.isArray(error.detail)) {
+                            // Pydantic validation errors are arrays
+                            errorMessage = error.detail.map(err =>
+                                `${err.loc.join('.')}: ${err.msg}`
+                            ).join('\n');
+                        } else if (error.detail) {
+                            errorMessage = JSON.stringify(error.detail, null, 2);
+                        }
                     } catch (e) {
                         errorMessage = `HTTP ${response.status}: ${response.statusText}`;
                     }
