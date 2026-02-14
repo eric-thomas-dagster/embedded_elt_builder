@@ -1481,14 +1481,10 @@
                 <!-- Actions Section -->
                 <div id="gitActionsSection" class="form-group" style="display: none;">
                     <label style="font-size: 0.95em; color: #64748b; margin-bottom: 12px;">Actions</label>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                         <button onclick="gitCommitWithMessage()" class="btn-success" style="display: flex; align-items: center; justify-content: center; gap: 8px;">
-                            <span style="font-size: 1.2em;">💾</span>
-                            <span>Commit</span>
-                        </button>
-                        <button onclick="gitPush()" style="background: #667eea; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                            <span style="font-size: 1.2em;">⬆️</span>
-                            <span>Push</span>
+                            <span style="font-size: 1.2em;">💾⬆️</span>
+                            <span>Commit & Push</span>
                         </button>
                         <button onclick="gitRevert()" class="btn-outline" style="display: flex; align-items: center; justify-content: center; gap: 8px; color: #dc2626; border-color: #dc2626;">
                             <span style="font-size: 1.2em;">↩️</span>
@@ -4286,15 +4282,20 @@
             if (!message) return;
 
             try {
+                // Commit changes
                 await apiCall('/api/git/commit', {
                     method: 'POST',
                     body: JSON.stringify({message})
                 });
-                showAlert('Changes committed successfully', 'success');
+
+                // Push to remote
+                await apiCall('/api/git/push', {method: 'POST'});
+
+                showAlert('Changes committed and pushed successfully', 'success');
                 await loadGitStatusInModal();
                 await loadGitStatus();
             } catch (error) {
-                console.error('Error committing changes:', error);
+                console.error('Error committing and pushing changes:', error);
             }
         }
 
@@ -4373,18 +4374,23 @@
             }
 
             try {
+                // Commit changes
                 await apiCall('/api/git/commit', {
                     method: 'POST',
                     body: JSON.stringify({message})
                 });
-                showAlert('Changes committed successfully', 'success');
+
+                // Push to remote
+                await apiCall('/api/git/push', {method: 'POST'});
+
+                showAlert('Changes committed and pushed successfully', 'success');
                 document.getElementById('gitCommitMessage').value = '';
                 await loadGitStatusInModal();
                 await loadGitStatus();
                 await loadGitDiff();
                 await loadGitHistory();
             } catch (error) {
-                console.error('Error committing changes:', error);
+                console.error('Error committing and pushing changes:', error);
             }
         }
 
