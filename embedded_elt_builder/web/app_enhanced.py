@@ -14,6 +14,7 @@ from pydantic import BaseModel
 import yaml
 from git import Repo
 import shutil
+import requests
 
 from ..pipeline_generator import (
     PipelineRequest,
@@ -603,6 +604,140 @@ def create_app(repo_path: str) -> FastAPI:
 
         tool = choose_tool(source_type, destination_type)
         return {"tool": tool}
+
+    @app.get("/api/openapi-sources")
+    async def get_openapi_sources():
+        """Get list of available OpenAPI specs from dlt-hub/openapi-specs repository."""
+        import requests
+
+        try:
+            # Fetch directories from the open_api_specs folder
+            base_url = "https://api.github.com/repos/dlt-hub/openapi-specs/contents/open_api_specs"
+            response = requests.get(base_url)
+            response.raise_for_status()
+            directories = response.json()
+
+            all_sources = []
+
+            # Fetch specs from each category directory
+            for directory in directories:
+                if directory["type"] == "dir":
+                    category = directory["name"]
+                    # Skip broken specs
+                    if category.lower() == "broken":
+                        continue
+
+                    dir_url = directory["url"]
+                    dir_response = requests.get(dir_url)
+                    dir_response.raise_for_status()
+                    specs = dir_response.json()
+
+                    for spec in specs:
+                        if spec["type"] == "file" and (spec["name"].endswith(".yaml") or spec["name"].endswith(".json")):
+                            name = spec["name"].replace(".yaml", "").replace(".json", "")
+                            all_sources.append({
+                                "name": name,
+                                "category": category,
+                                "download_url": spec["download_url"],
+                                "file_type": "yaml" if spec["name"].endswith(".yaml") else "json"
+                            })
+
+            # Sort by name
+            all_sources.sort(key=lambda x: x["name"])
+
+            return {
+                "sources": all_sources,
+                "total": len(all_sources)
+            }
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to fetch OpenAPI sources: {str(e)}"
+            )
+
+    @app.post("/api/openapi-sources/generate")
+    async def generate_from_openapi(data: dict):
+        """Generate a dlt pipeline from an OpenAPI spec."""
+        import subprocess
+        import tempfile
+        import requests
+
+        spec_name = data.get("spec_name")
+        download_url = data.get("download_url")
+        pipeline_name = data.get("pipeline_name") or spec_name
+
+        if not spec_name or not download_url:
+            raise HTTPException(
+                status_code=400,
+                detail="spec_name and download_url are required"
+            )
+
+        try:
+            # Download the OpenAPI spec
+            spec_response = requests.get(download_url)
+            spec_response.raise_for_status()
+
+            # Save spec to temporary file
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+                f.write(spec_response.text)
+                spec_file = f.name
+
+            # Determine output directory
+            dlt_dir = app.state.repo_path / "pipelines" / "dlt"
+            dlt_dir.mkdir(parents=True, exist_ok=True)
+
+            # Run dlt-init-openapi to generate pipeline
+            result = subprocess.run(
+                [
+                    "dlt",
+                    "init-openapi",
+                    "--spec", spec_file,
+                    "--pipeline-name", pipeline_name,
+                    "--output-dir", str(dlt_dir / pipeline_name)
+                ],
+                capture_output=True,
+                text=True,
+                cwd=str(app.state.repo_path)
+            )
+
+            # Clean up temp file
+            os.unlink(spec_file)
+
+            if result.returncode != 0:
+                raise Exception(f"dlt-init-openapi failed: {result.stderr}")
+
+            # Create dagster.yaml metadata
+            dagster_yaml_path = dlt_dir / pipeline_name / "dagster.yaml"
+            dagster_metadata = {
+                "enabled": True,
+                "description": f"Pipeline generated from OpenAPI spec: {spec_name}",
+                "group": "openapi_generated",
+                "kinds": ["dlt", "rest_api", spec_name],
+                "tags": {
+                    "generated_from": "openapi_spec",
+                    "source_spec": spec_name
+                },
+                "schedule": {
+                    "enabled": False
+                },
+                "retries": 3,
+                "retry_delay": 60
+            }
+
+            with open(dagster_yaml_path, 'w') as f:
+                yaml.dump(dagster_metadata, f, default_flow_style=False)
+
+            return {
+                "success": True,
+                "message": f"Pipeline '{pipeline_name}' generated successfully from OpenAPI spec",
+                "pipeline_path": str(dlt_dir / pipeline_name)
+            }
+
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to generate pipeline: {str(e)}"
+            )
 
     @app.get("/api/git/status")
     async def git_status():
